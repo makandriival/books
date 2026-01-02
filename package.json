@@ -24,6 +24,7 @@
     "mg": "npm run typeorm -- --d src/config/orm.config.ts migration:generate ./src/database/migrations/${NAME}",
     "mr": "npm run typeorm -- --d src/config/orm.config.ts migration:run",
     "mre": "npm run typeorm -- --d src/config/orm.config.ts migration:revert",
+    "seed": "ts-node -r tsconfig-paths/register src/database/seeds/main.seeder.ts",
     "pre-commit": "npm run lint && npm run format"
   },
   "dependencies": {
@@ -38,10 +39,12 @@
     "@nestjs/platform-express": "^9.0.0",
     "@nestjs/typeorm": "^10.0.0",
     "@nestled/config": "^2.3.8",
+    "@types/faker": "^6.6.11",
     "bcrypt": "^5.1.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "cookie-parser": "^1.4.6",
+    "faker": "^6.6.6",
     "graphql": "^16.8.1",
     "graphql-tools": "^9.0.0",
     "passport": "^0.6.0",
@@ -50,9 +53,11 @@
     "reflect-metadata": "^0.1.13",
     "rimraf": "^3.0.2",
     "rxjs": "^7.2.0",
-    "typeorm": "^0.3.17"
+    "typeorm": "^0.3.17",
+    "typeorm-seeding": "^1.6.1"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.1.0",
     "@nestjs/cli": "^9.5.0",
     "@nestjs/schematics": "^9.0.0",
     "@nestjs/testing": "^9.0.0",

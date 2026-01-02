@@ -124,6 +124,7 @@ npm run start:prod
 ```
 
 The application will be available at:
+
 - **API**: http://localhost:8000
 - **GraphQL Playground**: http://localhost:8000/graphql
 
@@ -138,6 +139,7 @@ docker compose up
 ```
 
 This will:
+
 - Start PostgreSQL database on port 5432
 - Build and start the NestJS application on port 8000
 - Run migrations automatically
@@ -257,7 +259,29 @@ npm run mr
 npm run mre
 ```
 
-##  Authentication
+## Database Seeding
+
+Populate your database with test data using the built-in seeders.
+
+### Run Database Seeding
+
+```bash
+npm run seed
+```
+
+This creates:
+
+- **160 users** (50 writers, 10 moderators, 100 consumers)
+- **1000 books** with random titles and descriptions
+- **Thousands of comments** with random ratings
+
+### Prerequisites for Seeding
+
+1. Database must be running and accessible
+2. Environment variables must be configured (`.env` file)
+3. Migrations must be run first (`npm run mr`)
+
+## Authentication
 
 The template includes a complete authentication system:
 
@@ -269,12 +293,10 @@ The template includes a complete authentication system:
 ### Example GraphQL Queries
 
 #### Register/Login
+
 ```graphql
 mutation {
-  register(input: {
-    email: "user@example.com"
-    password: "password123"
-  }) {
+  register(input: { email: "user@example.com", password: "password123" }) {
     accessToken
     user {
       id
@@ -327,6 +349,7 @@ All configuration is managed through environment variables. See `.env-example` f
 ### TypeORM Configuration
 
 Database configuration is located in `src/config/orm.config.ts` with:
+
 - Custom naming strategy
 - Migration paths
 - Logging configuration
@@ -335,6 +358,7 @@ Database configuration is located in `src/config/orm.config.ts` with:
 ### GraphQL Configuration
 
 GraphQL is configured in `app.module.ts` with:
+
 - Auto schema generation
 - GraphQL Playground enabled
 - Context injection for request/response
