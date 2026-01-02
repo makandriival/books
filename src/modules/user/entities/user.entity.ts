@@ -1,7 +1,8 @@
 import { ObjectType, Field } from '@nestjs/graphql';
 import { BaseSchema } from '../../baseModule/baseSchema.entity';
-import { Column, Entity, OneToMany } from 'typeorm';
+import { Column, Entity, OneToMany, ManyToMany } from 'typeorm';
 import { Role } from '../../../common/enums/userRole.enum';
+import { Book } from '../../books/entities/book.entity';
 
 @ObjectType()
 @Entity('user')
@@ -32,4 +33,8 @@ export class User extends BaseSchema {
   @Column({ type: 'enum', enum: Role, default: Role.WRITER })
   @Field(() => Role)
   role: Role;
+
+  @ManyToMany(() => Book, book => book.authors)
+  @Field(() => [Book])
+  authoredBooks: Book[];
 }
