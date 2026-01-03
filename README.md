@@ -306,6 +306,28 @@ mutation {
 }
 ```
 
+#### Book Search Query
+
+```graphql
+query {
+  bookSearch(
+    input: {
+      query: "fiction"
+      filters: { genre: "Fiction", publicationYear: [2000, 2020] }
+    }
+  ) {
+    id
+    title
+    genre
+    publicationYear
+    authors {
+      firstName
+      lastName
+    }
+  }
+}
+```
+
 ## Testing
 
 ### Run All Tests

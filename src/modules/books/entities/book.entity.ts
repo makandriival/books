@@ -23,6 +23,14 @@ export class Book extends BaseSchema {
   @Field(() => Number, { nullable: true })
   pages: number;
 
+  @Column({ type: 'varchar', nullable: true })
+  @Field(() => String, { nullable: true })
+  genre: string;
+
+  @Column({ type: 'int', nullable: true })
+  @Field(() => Number, { nullable: true })
+  publicationYear: number;
+
   @ManyToMany(() => User, (user) => user.authoredBooks)
   @JoinTable({
     name: 'book_authors',

@@ -2,52 +2,47 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Book } from './entities/book.entity';
-import { Comment } from './entities/comment.entity';
+import { SearchInput } from '../../common/shared/search.input';
 
 @Injectable()
 export class BooksService {
   constructor(
     @InjectRepository(Book)
     private readonly bookRepository: Repository<Book>,
-    @InjectRepository(Comment)
-    private readonly commentRepository: Repository<Comment>,
   ) {}
 
-  async findAll(): Promise<Book[]> {
-    return this.bookRepository.find({
-      relations: ['authors', 'comments'],
-    });
-  }
+  async bookSearch(input: SearchInput): Promise<Book[]> {
+    const { query, filters } = input;
 
-  async findOne(id: string): Promise<Book> {
-    return this.bookRepository.findOne({
-      where: { id },
-      relations: ['authors', 'comments'],
-    });
-  }
-
-  async searchBooks(query: string): Promise<Book[]> {
-    return this.bookRepository
+    let bookQuery = this.bookRepository
       .createQueryBuilder('book')
       .leftJoinAndSelect('book.authors', 'author')
-      .leftJoinAndSelect('book.comments', 'comment')
-      .where('book.title ILIKE :query OR book.description ILIKE :query OR author.firstName ILIKE :query OR author.lastName ILIKE :query',
-             { query: `%${query}%` })
-      .getMany();
-  }
+      .leftJoinAndSelect('book.comments', 'comment');
 
-  async createComment(bookId: string, content: string, rating: number = 1): Promise<Comment> {
-    const book = await this.bookRepository.findOne({ where: { id: bookId } });
-    if (!book) {
-      throw new Error('Book not found');
+    const searchCondition =
+      '(book.title ILIKE :query OR book.description ILIKE :query OR book.genre ILIKE :query OR author.firstName ILIKE :query OR author.lastName ILIKE :query)';
+
+    bookQuery = bookQuery.where(searchCondition, { query: `%${query}%` });
+
+    if (filters) {
+      if (filters.genre) {
+        bookQuery = bookQuery.andWhere('book.genre = :genre', {
+          genre: filters.genre,
+        });
+      }
+      if (filters.publicationYear && filters.publicationYear.length === 2) {
+        bookQuery = bookQuery.andWhere(
+          'book.publicationYear BETWEEN :startYear AND :endYear',
+          {
+            startYear: filters.publicationYear[0],
+            endYear: filters.publicationYear[1],
+          },
+        );
+      }
     }
 
-    const comment = this.commentRepository.create({
-      content,
-      rating,
-      book,
-    });
+    const books = await bookQuery.getMany();
 
-    return this.commentRepository.save(comment);
+    return books;
   }
 }

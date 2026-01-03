@@ -22,7 +22,7 @@ export class UserSeeder extends BaseSeeder {
       });
       user.password = await bcrypt.hash('password123', 10); // Default password
       user.role = Role.WRITER;
-      user.status = faker.datatype.boolean(0.9); // 90% active users
+      user.status = faker.datatype.boolean(); // 90% active users
 
       users.push(user);
     }
@@ -54,7 +54,7 @@ export class UserSeeder extends BaseSeeder {
       });
       user.password = await bcrypt.hash('password123', 10);
       user.role = Role.CONSUMER;
-      user.status = faker.datatype.boolean(0.95); // 95% active users
+      user.status = faker.datatype.boolean(); // 95% active users
 
       users.push(user);
     }

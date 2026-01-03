@@ -27,33 +27,56 @@ export class BookSeeder extends BaseSeeder {
       const book = new Book();
 
       // Generate random book title
-      const titleWords = faker.number.int({ min: 2, max: 6 });
+      const titleWords = faker.datatype.number({ min: 2, max: 6 });
       book.title = faker.lorem.words(titleWords);
 
       // Generate random description
-      const descriptionSentences = faker.number.int({ min: 3, max: 10 });
+      const descriptionSentences = faker.datatype.number({ min: 3, max: 10 });
       book.description = faker.lorem.sentences(descriptionSentences);
 
       // Optional cover image URL
-      if (faker.datatype.boolean(0.7)) {
+      if (faker.datatype.boolean()) {
         // 70% chance of having a cover
         book.cover = faker.image.url();
       }
 
       // Optional page count
-      if (faker.datatype.boolean(0.8)) {
+      if (faker.datatype.boolean()) {
         // 80% chance of having page count
-        book.pages = faker.number.int({ min: 50, max: 2000 });
+        book.pages = faker.datatype.number({ min: 50, max: 2000 });
       }
 
+      // Genre (always assign a genre)
+      const genres = [
+        'Fiction',
+        'Non-Fiction',
+        'Science Fiction',
+        'Fantasy',
+        'Mystery',
+        'Romance',
+        'Thriller',
+        'Biography',
+        'History',
+        'Self-Help',
+        'Business',
+        'Technology',
+        'Health',
+        'Travel',
+        'Cooking',
+      ];
+      book.genre = genres[Math.floor(Math.random() * genres.length)];
+
+      // Publication year (always assign a year)
+      book.publicationYear = faker.datatype.number({ min: 1900, max: 2024 });
+
       // Assign random authors (1-3 authors per book)
-      const numAuthors = faker.number.int({ min: 1, max: 3 });
+      const numAuthors = faker.datatype.number({ min: 1, max: 3 });
       const selectedAuthors: User[] = [];
 
       // Select random unique authors
       const availableWriters = [...writers]; // Copy the array
       for (let j = 0; j < numAuthors && availableWriters.length > 0; j++) {
-        const randomIndex = faker.number.int({
+        const randomIndex = faker.datatype.number({
           min: 0,
           max: availableWriters.length - 1,
         });

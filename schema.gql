@@ -9,8 +9,10 @@ type Book {
   createdAt: DateTime!
   deletedAt: DateTime!
   description: String!
+  genre: String
   id: String!
   pages: Float
+  publicationYear: Float
   title: String!
   updatedAt: DateTime!
 }
@@ -49,10 +51,7 @@ type Mutation {
 }
 
 type Query {
-  book(id: ID!): Book!
-  bookComments(bookId: ID!): [Comment!]!
-  books: [Book!]!
-  searchBooks(query: String!): [Book!]!
+  bookSearch(input: SearchInput!): [Book!]!
   userById(id: String!): User!
   users: [User!]!
 }
@@ -62,6 +61,16 @@ enum Role {
   CONSUMER
   MODERATOR
   WRITER
+}
+
+input SearchFiltersInput {
+  genre: String
+  publicationYear: [Float!]
+}
+
+input SearchInput {
+  filters: SearchFiltersInput
+  query: String!
 }
 
 input UpdateUserInput {
