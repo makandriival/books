@@ -1,17 +1,17 @@
 import { Resolver, Query, Args } from '@nestjs/graphql';
 import { BooksService } from './books.service';
 import { Book } from './entities/book.entity';
-import { SearchInput } from '../../common/shared/search.input';
-import { SearchResultWithSource } from '../../common/shared/search-result.object';
+import { SearchBooksInput } from './dto/search-books.input';
+import { SearchBooksResult } from './dto/book.output';
 
 @Resolver(() => Book)
 export class BooksResolver {
   constructor(private readonly booksService: BooksService) {}
 
-  @Query(() => SearchResultWithSource)
+  @Query(() => SearchBooksResult)
   async search(
-    @Args('input') input: SearchInput,
-  ): Promise<SearchResultWithSource> {
+    @Args('input') input: SearchBooksInput,
+  ): Promise<SearchBooksResult> {
     return this.booksService.search(input);
   }
 }

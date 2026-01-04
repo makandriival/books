@@ -1,4 +1,5 @@
 import { Field, InputType } from '@nestjs/graphql';
+import { Pagination } from './pagination.input';
 
 @InputType()
 export class SearchFiltersInput {
@@ -10,7 +11,7 @@ export class SearchFiltersInput {
 }
 
 @InputType()
-export class SearchInput {
+export class SearchInput extends Pagination {
   @Field(() => String)
   query: string;
 

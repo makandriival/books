@@ -1,70 +1,92 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { Book } from './entities/book.entity';
-import { SearchInput } from '../../common/shared/search.input';
-import { SearchResultWithSource } from '../../common/shared/search-result.object';
+import { SearchBooksInput } from './dto/search-books.input';
+import { SearchBooksResult } from './dto/book.output';
+import { BookRepository } from './repositories/book.repository';
+
+interface SearchCacheData {
+  books: Book[];
+  total: number;
+}
 
 @Injectable()
 export class BooksService {
   // Map to store in-flight search promises for deduplication
-  private searchPromises = new Map<string, Promise<Book[]>>();
+  private searchPromises = new Map<string, Promise<SearchCacheData>>();
 
   constructor(
-    @InjectRepository(Book)
-    private readonly bookRepository: Repository<Book>,
+    private readonly bookRepository: BookRepository,
     @Inject(CACHE_MANAGER)
     private cacheManager: Cache,
   ) {}
 
-  private generateCacheKey(input: SearchInput): string {
-    // Create a deterministic cache key from search input
-    return `search:${JSON.stringify({
-      query: input.query,
-      filters: input.filters || {},
-    })}`;
+  private generateCacheKey(input: SearchBooksInput): string {
+    const filterKey = input.filters
+      ? JSON.stringify(input.filters, Object.keys(input.filters).sort())
+      : '{}';
+
+    return `search:q=${input.query}:f=${filterKey}:p=${input.page}:l=${input.limit}`;
   }
 
-  async search(input: SearchInput): Promise<SearchResultWithSource> {
+  async search(input: SearchBooksInput): Promise<SearchBooksResult> {
     const cacheKey = this.generateCacheKey(input);
+    const page = input.page || 1;
+    const limit = input.limit || 20;
 
-    // Try to get from cache first
-    const cachedResult = await this.cacheManager.get<Book[]>(cacheKey);
+    const cachedResult = await this.cacheManager.get<SearchCacheData>(cacheKey);
     if (cachedResult) {
+      const lastPage = Math.ceil(cachedResult.total / limit);
       return {
-        books: cachedResult,
-        source: 'cache',
-        cacheKey,
+        books: cachedResult.books,
+        pagination: {
+          page,
+          limit,
+          total: cachedResult.total,
+          lastPage,
+          hasNextPage: page < lastPage,
+          hasPreviousPage: page > 1,
+        },
       };
     }
 
-    // Check if there's already an in-flight request for this search
     const existingPromise = this.searchPromises.get(cacheKey);
     if (existingPromise) {
-      const books = await existingPromise;
+      const result = await existingPromise;
+      const lastPage = Math.ceil(result.total / limit);
       return {
-        books,
-        source: 'database',
-        cacheKey,
+        books: result.books,
+        pagination: {
+          page,
+          limit,
+          total: result.total,
+          lastPage,
+          hasNextPage: page < lastPage,
+          hasPreviousPage: page > 1,
+        },
       };
     }
 
-    // Create the promise for this search
     const searchPromise = this.performDatabaseSearch(input);
     this.searchPromises.set(cacheKey, searchPromise);
 
     try {
-      const books = await searchPromise;
+      const result = await searchPromise;
 
-      // Store in cache
-      await this.cacheManager.set(cacheKey, books);
+      await this.cacheManager.set(cacheKey, result);
 
+      const lastPage = Math.ceil(result.total / limit);
       return {
-        books,
-        source: 'database',
-        cacheKey,
+        books: result.books,
+        pagination: {
+          page,
+          limit,
+          total: result.total,
+          lastPage,
+          hasNextPage: page < lastPage,
+          hasPreviousPage: page > 1,
+        },
       };
     } finally {
       // Clean up the promise from the map after it's done
@@ -72,11 +94,14 @@ export class BooksService {
     }
   }
 
-  private async performDatabaseSearch(input: SearchInput): Promise<Book[]> {
-    // If not in cache, fetch from database
-    const { query, filters } = input;
+  private async performDatabaseSearch(
+    input: SearchBooksInput,
+  ): Promise<SearchCacheData> {
+    const { query, filters, page = 1, limit = 20 } = input;
 
-    let bookQuery = this.bookRepository
+    const skip = (page - 1) * limit;
+
+    const bookQuery = this.bookRepository['repository']
       .createQueryBuilder('book')
       .leftJoinAndSelect('book.authors', 'author')
       .leftJoinAndSelect('book.comments', 'comment');
@@ -84,16 +109,16 @@ export class BooksService {
     const searchCondition =
       '(book.title ILIKE :query OR book.description ILIKE :query OR book.genre ILIKE :query OR author.firstName ILIKE :query OR author.lastName ILIKE :query)';
 
-    bookQuery = bookQuery.where(searchCondition, { query: `%${query}%` });
+    bookQuery.where(searchCondition, { query: `%${query}%` });
 
     if (filters) {
       if (filters.genre) {
-        bookQuery = bookQuery.andWhere('book.genre = :genre', {
+        bookQuery.andWhere('book.genre = :genre', {
           genre: filters.genre,
         });
       }
       if (filters.publicationYear && filters.publicationYear.length === 2) {
-        bookQuery = bookQuery.andWhere(
+        bookQuery.andWhere(
           'book.publicationYear BETWEEN :startYear AND :endYear',
           {
             startYear: filters.publicationYear[0],
@@ -103,16 +128,10 @@ export class BooksService {
       }
     }
 
-    return await bookQuery.getMany();
-  }
+    bookQuery.skip(skip).take(limit);
 
-  // Optional: Method to invalidate cache (useful for mutations)
-  async invalidateCache(pattern?: string): Promise<void> {
-    if (pattern) {
-      // For pattern-based deletion, we reset all cache
-      await this.cacheManager.reset();
-    } else {
-      await this.cacheManager.reset();
-    }
+    const [books, total] = await bookQuery.getManyAndCount();
+
+    return { books, total };
   }
 }

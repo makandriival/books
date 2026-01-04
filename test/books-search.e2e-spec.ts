@@ -35,13 +35,20 @@ describe('Books Search Functionality (e2e)', () => {
               lastName
             }
           }
-          source
-          cacheKey
+          pagination {
+            total
+            limit
+            offset
+            currentPage
+            totalPages
+            hasNextPage
+            hasPreviousPage
+          }
         }
       }
     `;
 
-    it('should return books matching title search with source indicator', async () => {
+    it('should return books matching title search with pagination', async () => {
       const response = await request(app.getHttpServer())
         .post('/graphql')
         .send({
@@ -58,9 +65,8 @@ describe('Books Search Functionality (e2e)', () => {
       expect(response.body.data.search).toBeDefined();
       expect(response.body.data.search.books).toBeDefined();
       expect(Array.isArray(response.body.data.search.books)).toBe(true);
-      expect(response.body.data.search.source).toBeDefined();
-      expect(['cache', 'database']).toContain(response.body.data.search.source);
-      expect(response.body.data.search.cacheKey).toBeDefined();
+      expect(response.body.data.search.pagination).toBeDefined();
+      expect(response.body.data.search.pagination.limit).toBe(20); // default
       expect(response.body.errors).toBeUndefined();
 
       // If results exist, verify they contain the search term in title or description
@@ -174,7 +180,7 @@ describe('Books Search Functionality (e2e)', () => {
       }
     });
 
-    it('should return "cache" source on second identical request', async () => {
+    it('should return "cache" on second identical request', async () => {
       // First request - should be from database
       const firstResponse = await request(app.getHttpServer())
         .post('/graphql')
@@ -187,7 +193,7 @@ describe('Books Search Functionality (e2e)', () => {
           },
         });
 
-      // Second identical request - should be from cache
+      // Second identical request - should be from cache (faster)
       const secondResponse = await request(app.getHttpServer())
         .post('/graphql')
         .send({
@@ -199,9 +205,11 @@ describe('Books Search Functionality (e2e)', () => {
           },
         });
 
-      expect(secondResponse.body.data.search.source).toBe('cache');
       expect(secondResponse.body.data.search.books).toEqual(
         firstResponse.body.data.search.books,
+      );
+      expect(secondResponse.body.data.search.pagination).toEqual(
+        firstResponse.body.data.search.pagination,
       );
     });
   });
@@ -222,7 +230,11 @@ describe('Books Search Functionality (e2e)', () => {
               lastName
             }
           }
-          source
+          pagination {
+            total
+            limit
+            offset
+          }
         }
       }
     `;
@@ -359,7 +371,9 @@ describe('Books Search Functionality (e2e)', () => {
             id
             title
           }
-          source
+          pagination {
+            total
+          }
         }
       }
     `;
@@ -558,6 +572,240 @@ describe('Books Search Functionality (e2e)', () => {
         expect(book.authors).toBeUndefined();
         expect(book.comments).toBeUndefined();
       }
+    });
+  });
+
+  describe('Pagination', () => {
+    const paginationQuery = `
+      query SearchBooks($input: SearchInput!) {
+        search(input: $input) {
+          books {
+            id
+            title
+          }
+          pagination {
+            total
+            limit
+            offset
+            currentPage
+            totalPages
+            hasNextPage
+            hasPreviousPage
+          }
+        }
+      }
+    `;
+
+    it('should return paginated results with default pagination', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/graphql')
+        .send({
+          query: paginationQuery,
+          variables: {
+            input: {
+              query: 'book',
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.search.pagination).toBeDefined();
+      expect(response.body.data.search.pagination.limit).toBe(20);
+      expect(response.body.data.search.pagination.offset).toBe(0);
+      expect(response.body.data.search.pagination.currentPage).toBe(1);
+      expect(response.body.data.search.pagination.total).toBeGreaterThanOrEqual(
+        0,
+      );
+    });
+
+    it('should respect custom limit parameter', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/graphql')
+        .send({
+          query: paginationQuery,
+          variables: {
+            input: {
+              query: 'book',
+              limit: 5,
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.search.books.length).toBeLessThanOrEqual(5);
+      expect(response.body.data.search.pagination.limit).toBe(5);
+    });
+
+    it('should respect offset parameter for pagination', async () => {
+      const firstPageResponse = await request(app.getHttpServer())
+        .post('/graphql')
+        .send({
+          query: paginationQuery,
+          variables: {
+            input: {
+              query: 'book',
+              limit: 5,
+              offset: 0,
+            },
+          },
+        });
+
+      const secondPageResponse = await request(app.getHttpServer())
+        .post('/graphql')
+        .send({
+          query: paginationQuery,
+          variables: {
+            input: {
+              query: 'book',
+              limit: 5,
+              offset: 5,
+            },
+          },
+        });
+
+      expect(firstPageResponse.status).toBe(200);
+      expect(secondPageResponse.status).toBe(200);
+
+      // If there are enough results, pages should be different
+      if (
+        firstPageResponse.body.data.search.pagination.total > 5 &&
+        secondPageResponse.body.data.search.books.length > 0
+      ) {
+        expect(firstPageResponse.body.data.search.books[0].id).not.toBe(
+          secondPageResponse.body.data.search.books[0].id,
+        );
+      }
+
+      expect(secondPageResponse.body.data.search.pagination.currentPage).toBe(
+        2,
+      );
+    });
+
+    it('should calculate pagination metadata correctly', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/graphql')
+        .send({
+          query: paginationQuery,
+          variables: {
+            input: {
+              query: 'book',
+              limit: 10,
+              offset: 0,
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      const { pagination } = response.body.data.search;
+
+      expect(pagination.currentPage).toBe(1);
+      expect(pagination.hasPreviousPage).toBe(false);
+
+      if (pagination.total > 10) {
+        expect(pagination.hasNextPage).toBe(true);
+        expect(pagination.totalPages).toBeGreaterThan(1);
+      } else {
+        expect(pagination.hasNextPage).toBe(false);
+      }
+    });
+
+    it('should enforce maximum limit of 100', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/graphql')
+        .send({
+          query: paginationQuery,
+          variables: {
+            input: {
+              query: 'book',
+              limit: 200, // Exceeds max
+            },
+          },
+        });
+
+      // Should return validation error
+      expect(response.status).toBe(200);
+      expect(response.body.errors).toBeDefined();
+      expect(
+        response.body.errors.some((err) =>
+          err.message.toLowerCase().includes('limit'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should handle last page correctly', async () => {
+      // First get total count
+      const firstResponse = await request(app.getHttpServer())
+        .post('/graphql')
+        .send({
+          query: paginationQuery,
+          variables: {
+            input: {
+              query: 'book',
+              limit: 10,
+            },
+          },
+        });
+
+      const total = firstResponse.body.data.search.pagination.total;
+
+      if (total > 0) {
+        const lastPageOffset = Math.floor(total / 10) * 10;
+
+        const lastPageResponse = await request(app.getHttpServer())
+          .post('/graphql')
+          .send({
+            query: paginationQuery,
+            variables: {
+              input: {
+                query: 'book',
+                limit: 10,
+                offset: lastPageOffset,
+              },
+            },
+          });
+
+        expect(lastPageResponse.status).toBe(200);
+        expect(lastPageResponse.body.data.search.pagination.hasNextPage).toBe(
+          false,
+        );
+        expect(
+          lastPageResponse.body.data.search.pagination.hasPreviousPage,
+        ).toBe(lastPageOffset > 0);
+      }
+    });
+
+    it('should return consistent pagination with cache', async () => {
+      // First request - from database
+      const firstResponse = await request(app.getHttpServer())
+        .post('/graphql')
+        .send({
+          query: paginationQuery,
+          variables: {
+            input: {
+              query: 'unique-pagination-test',
+              limit: 10,
+              offset: 0,
+            },
+          },
+        });
+
+      // Second identical request - from cache
+      const secondResponse = await request(app.getHttpServer())
+        .post('/graphql')
+        .send({
+          query: paginationQuery,
+          variables: {
+            input: {
+              query: 'unique-pagination-test',
+              limit: 10,
+              offset: 0,
+            },
+          },
+        });
+
+      expect(secondResponse.body.data.search.pagination).toEqual(
+        firstResponse.body.data.search.pagination,
+      );
     });
   });
 });

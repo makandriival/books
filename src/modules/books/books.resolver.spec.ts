@@ -2,10 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BooksResolver } from './books.resolver';
 import { BooksService } from './books.service';
 import { GqlThrottlerGuard } from '../../common/guards/gql-throttler.guard';
-import { SearchInput } from '../../common/shared/search.input';
+import { SearchBooksInput } from './dto/search-books.input';
 import { Book } from './entities/book.entity';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { SearchResultWithSource } from '../../common/shared/search-result.object';
+import { SearchBooksResult } from './dto/book.output';
 
 describe('BooksResolver', () => {
   let resolver: BooksResolver;
@@ -50,11 +50,17 @@ describe('BooksResolver', () => {
 
   describe('search', () => {
     it('should call booksService.search with correct input', async () => {
-      const mockInput: SearchInput = { query: 'test query' };
-      const mockResult: SearchResultWithSource = {
+      const mockInput: SearchBooksInput = { query: 'test query' };
+      const mockResult: SearchBooksResult = {
         books: [{ id: '1', title: 'Test Book' }] as Book[],
-        source: 'database',
-        cacheKey: 'search:test',
+        pagination: {
+          total: 1,
+          page: 1,
+          limit: 20,
+          lastPage: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
       };
 
       jest.spyOn(booksService, 'search').mockResolvedValue(mockResult);
@@ -63,15 +69,21 @@ describe('BooksResolver', () => {
 
       expect(booksService.search).toHaveBeenCalledWith(mockInput);
       expect(result).toEqual(mockResult);
-      expect(result.source).toBe('database');
+      expect(result.pagination.total).toBe(1);
     });
 
     it('should return empty array when no books match', async () => {
-      const mockInput: SearchInput = { query: 'nonexistent' };
-      const mockResult: SearchResultWithSource = {
+      const mockInput: SearchBooksInput = { query: 'nonexistent' };
+      const mockResult: SearchBooksResult = {
         books: [],
-        source: 'database',
-        cacheKey: 'search:nonexistent',
+        pagination: {
+          total: 0,
+          page: 1,
+          limit: 20,
+          lastPage: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
       };
 
       jest.spyOn(booksService, 'search').mockResolvedValue(mockResult);
@@ -80,21 +92,27 @@ describe('BooksResolver', () => {
 
       expect(booksService.search).toHaveBeenCalledWith(mockInput);
       expect(result.books).toEqual([]);
-      expect(result.source).toBe('database');
+      expect(result.pagination.total).toBe(0);
     });
 
     it('should handle search with filters', async () => {
-      const mockInput: SearchInput = {
+      const mockInput: SearchBooksInput = {
         query: 'fantasy',
         filters: {
           genre: 'Fiction',
           publicationYear: [2000, 2020],
         },
       };
-      const mockResult: SearchResultWithSource = {
+      const mockResult: SearchBooksResult = {
         books: [{ id: '1', title: 'Fantasy Book', genre: 'Fiction' }] as Book[],
-        source: 'database',
-        cacheKey: 'search:fantasy',
+        pagination: {
+          total: 1,
+          page: 1,
+          limit: 20,
+          lastPage: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
       };
 
       jest.spyOn(booksService, 'search').mockResolvedValue(mockResult);
@@ -103,22 +121,27 @@ describe('BooksResolver', () => {
 
       expect(booksService.search).toHaveBeenCalledWith(mockInput);
       expect(result.books).toEqual(mockResult.books);
-      expect(result.source).toBe('database');
     });
 
     it('should handle search with only genre filter', async () => {
-      const mockInput: SearchInput = {
+      const mockInput: SearchBooksInput = {
         query: 'book',
         filters: {
           genre: 'Non-Fiction',
         },
       };
-      const mockResult: SearchResultWithSource = {
+      const mockResult: SearchBooksResult = {
         books: [
           { id: '2', title: 'Non-Fiction Book', genre: 'Non-Fiction' },
         ] as Book[],
-        source: 'database',
-        cacheKey: 'search:book',
+        pagination: {
+          total: 1,
+          page: 1,
+          limit: 20,
+          lastPage: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
       };
 
       jest.spyOn(booksService, 'search').mockResolvedValue(mockResult);
@@ -130,18 +153,24 @@ describe('BooksResolver', () => {
     });
 
     it('should handle search with only year range filter', async () => {
-      const mockInput: SearchInput = {
+      const mockInput: SearchBooksInput = {
         query: 'classic',
         filters: {
           publicationYear: [1900, 1950],
         },
       };
-      const mockResult: SearchResultWithSource = {
+      const mockResult: SearchBooksResult = {
         books: [
           { id: '3', title: 'Classic Book', publicationYear: 1920 },
         ] as Book[],
-        source: 'database',
-        cacheKey: 'search:classic',
+        pagination: {
+          total: 1,
+          page: 1,
+          limit: 20,
+          lastPage: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
       };
 
       jest.spyOn(booksService, 'search').mockResolvedValue(mockResult);
@@ -152,24 +181,58 @@ describe('BooksResolver', () => {
       expect(result.books).toEqual(mockResult.books);
     });
 
-    it('should indicate when results come from cache', async () => {
-      const mockInput: SearchInput = { query: 'cached' };
-      const mockResult: SearchResultWithSource = {
+    it('should return results from cache when available', async () => {
+      const mockInput: SearchBooksInput = { query: 'cached' };
+      const mockResult: SearchBooksResult = {
         books: [{ id: '1', title: 'Cached Book' }] as Book[],
-        source: 'cache',
-        cacheKey: 'search:cached',
+        pagination: {
+          total: 1,
+          page: 1,
+          limit: 20,
+          lastPage: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
       };
 
       jest.spyOn(booksService, 'search').mockResolvedValue(mockResult);
 
       const result = await resolver.search(mockInput);
 
-      expect(result.source).toBe('cache');
-      expect(result.cacheKey).toBeDefined();
+      expect(result.pagination).toBeDefined();
+      expect(result.books).toBeDefined();
+    });
+
+    it('should handle pagination correctly', async () => {
+      const mockInput: SearchBooksInput = {
+        query: 'book',
+        limit: 10,
+        page: 2,
+      };
+      const mockResult: SearchBooksResult = {
+        books: [{ id: '11', title: 'Book 11' }] as Book[],
+        pagination: {
+          total: 100,
+          page: 2,
+          limit: 10,
+          lastPage: 10,
+          hasNextPage: true,
+          hasPreviousPage: true,
+        },
+      };
+
+      jest.spyOn(booksService, 'search').mockResolvedValue(mockResult);
+
+      const result = await resolver.search(mockInput);
+
+      expect(result.pagination.page).toBe(2);
+      expect(result.pagination.hasNextPage).toBe(true);
+      expect(result.pagination.hasPreviousPage).toBe(true);
+      expect(result.pagination.total).toBe(100);
     });
 
     it('should handle errors from service', async () => {
-      const mockInput: SearchInput = { query: 'test' };
+      const mockInput: SearchBooksInput = { query: 'test' };
       const error = new Error('Database connection failed');
 
       jest.spyOn(booksService, 'search').mockRejectedValue(error);
