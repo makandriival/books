@@ -5,7 +5,6 @@ import { UserService } from '../user/user.service';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { User } from '../user/entities/user.entity';
 import { Role } from '../../common/enums/userRole.enum';
-import { describe } from 'node:test';
 
 describe('AuthService', () => {
   let service: AuthService;

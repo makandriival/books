@@ -20,6 +20,20 @@ services:
       timeout: 30s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - '6379:6379'
+    networks:
+      - base-network
+    container_name: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+
   app:
     build:
       context: ./
@@ -35,10 +49,14 @@ services:
       - POSTGRES_DB=postgres
       - DB_HOST=database
       - POSTGRES_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     networks:
       - base-network
     depends_on:
       database:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 volumes:

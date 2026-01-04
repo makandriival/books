@@ -1,17 +1,79 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Book } from './entities/book.entity';
 import { SearchInput } from '../../common/shared/search.input';
+import { SearchResultWithSource } from '../../common/shared/search-result.object';
 
 @Injectable()
 export class BooksService {
+  // Map to store in-flight search promises for deduplication
+  private searchPromises = new Map<string, Promise<Book[]>>();
+
   constructor(
     @InjectRepository(Book)
     private readonly bookRepository: Repository<Book>,
+    @Inject(CACHE_MANAGER)
+    private cacheManager: Cache,
   ) {}
 
-  async bookSearch(input: SearchInput): Promise<Book[]> {
+  private generateCacheKey(input: SearchInput): string {
+    // Create a deterministic cache key from search input
+    return `search:${JSON.stringify({
+      query: input.query,
+      filters: input.filters || {},
+    })}`;
+  }
+
+  async search(input: SearchInput): Promise<SearchResultWithSource> {
+    const cacheKey = this.generateCacheKey(input);
+
+    // Try to get from cache first
+    const cachedResult = await this.cacheManager.get<Book[]>(cacheKey);
+    if (cachedResult) {
+      return {
+        books: cachedResult,
+        source: 'cache',
+        cacheKey,
+      };
+    }
+
+    // Check if there's already an in-flight request for this search
+    const existingPromise = this.searchPromises.get(cacheKey);
+    if (existingPromise) {
+      const books = await existingPromise;
+      return {
+        books,
+        source: 'database',
+        cacheKey,
+      };
+    }
+
+    // Create the promise for this search
+    const searchPromise = this.performDatabaseSearch(input);
+    this.searchPromises.set(cacheKey, searchPromise);
+
+    try {
+      const books = await searchPromise;
+
+      // Store in cache
+      await this.cacheManager.set(cacheKey, books);
+
+      return {
+        books,
+        source: 'database',
+        cacheKey,
+      };
+    } finally {
+      // Clean up the promise from the map after it's done
+      this.searchPromises.delete(cacheKey);
+    }
+  }
+
+  private async performDatabaseSearch(input: SearchInput): Promise<Book[]> {
+    // If not in cache, fetch from database
     const { query, filters } = input;
 
     let bookQuery = this.bookRepository
@@ -41,8 +103,16 @@ export class BooksService {
       }
     }
 
-    const books = await bookQuery.getMany();
+    return await bookQuery.getMany();
+  }
 
-    return books;
+  // Optional: Method to invalidate cache (useful for mutations)
+  async invalidateCache(pattern?: string): Promise<void> {
+    if (pattern) {
+      // For pattern-based deletion, we reset all cache
+      await this.cacheManager.reset();
+    } else {
+      await this.cacheManager.reset();
+    }
   }
 }

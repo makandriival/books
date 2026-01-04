@@ -51,7 +51,7 @@ type Mutation {
 }
 
 type Query {
-  bookSearch(input: SearchInput!): [Book!]!
+  search(input: SearchInput!): [Book!]!
   userById(id: String!): User!
   users: [User!]!
 }
